@@ -1,1 +1,67 @@
+apiVersion: v2
+name: my-chart
+version: 0.1.0
 
+# Declare the Prometheus Operator chart as a dependency
+dependencies:
+  - name: prometheus-operator
+    version: 8.17.0
+    repository: https://kubernetes-charts.storage.googleapis.com
+
+# Define the templates for configuring Prometheus and Alertmanager
+templates:
+
+# Alertmanager configuration
+- name: alertmanager-config
+  data:
+    alertmanager.yaml: |
+      global:
+        # Set the resolve timeout to 15 seconds
+        resolve_timeout: 15s
+      route:
+        # Set the default receiver for alerts to webhook
+        receiver: webhook
+        # Group alerts by node
+        group_by: [node]
+        # Wait 30 seconds before sending the first alert in a group
+        group_wait: 30s
+        # Send alerts in groups every 5 minutes
+        group_interval: 5m
+        # Repeat alerts every 12 hours
+        repeat_interval: 12h
+        routes:
+        - match:
+            # Only send alerts for critical severity
+            severity: critical
+          # Send alerts to the webhook receiver
+          receiver: xxxxxxxxxxxxxxx
+
+# Prometheus configuration
+- name: prometheus-config
+  data:
+    prometheus.yaml: |
+      rule_files:
+        # Use the alertmanager-config.yaml file for alert rules
+        - alertmanager-config.yaml
+        - node-down-rules.yaml
+      alerting:
+        alertmanagers:
+          - static_configs:
+            - targets:
+              # Add the Alertmanager service as a target
+              - alertmanager:9093
+
+# Prometheus rules for monitoring node state
+- name: node-down-rules
+  data:
+    node-down-rules.yaml: |
+      groups:
+      - name: k8s
+        rules:
+        - alert: NodeDown
+          expr: up == 0
+          for: 15s
+          labels:
+            severity: critical
+          annotations:
+            summary: "Node {{ $labels.instance }} is down"
